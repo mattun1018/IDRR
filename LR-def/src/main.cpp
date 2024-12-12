@@ -133,10 +133,10 @@ void loop()
   {
     for (int i = 0; i < 2; i++)
     {
-      controlDxl(DXL_ID1, 159);//109
-      controlDxl(DXL_ID2, 875);//925
-      controlDxl(DXL_ID1, 875);//925
-      controlDxl(DXL_ID2, 159);//109
+      controlDxl(DXL_ID1, 159); // 109
+      controlDxl(DXL_ID2, 875); // 925
+      controlDxl(DXL_ID1, 875); // 925
+      controlDxl(DXL_ID2, 159); // 109
     }
 
     // controlDxl(DXL_ID1, 820, 204, 512);
