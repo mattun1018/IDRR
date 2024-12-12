@@ -148,10 +148,10 @@ void loop()
   {
     for (int i = 0; i < 2; i++)
     {
-      defcontrolDxl(DXL_ID1, 109, 1000);
-      defcontrolDxl(DXL_ID2, 925, 300);
-      defcontrolDxl(DXL_ID1, 925, 1000);
-      defcontrolDxl(DXL_ID2, 109, 300);
+      defcontrolDxl(DXL_ID1, 159, 1000); // 109
+      defcontrolDxl(DXL_ID2, 875, 300);  // 925
+      defcontrolDxl(DXL_ID1, 875, 1000); // 925
+      defcontrolDxl(DXL_ID2, 159, 300);  // 109
     }
   }
   if (val == '9')
