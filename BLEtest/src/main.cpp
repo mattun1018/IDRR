@@ -1,83 +1,79 @@
+#include <Arduino.h>
+// #include <Servo.h>
 #include <ArduinoBLE.h>
 
-// サービスと特徴UUIDの設定
-BLEService myService("180D");                                       // サービスUUID（例：心拍サービス）
-BLECharacteristic myCharacteristic("2A37", BLEWrite | BLERead, 20); // 特徴UUID（例：心拍数）、最大サイズ20バイト
+#define ESC_PIN 4 // MKR WiFi 1010の使用可能なピン番号
+#define STOP_VOLUME 1000
+
+int targetVolume = STOP_VOLUME;
+String receivedValue;
+
+// UUIDs for the BLE service and characteristic
+#define SERVICE_UUID "99474AC9-9C46-435D-AAE7-2C4B7E017494"
+#define CHARACTERISTIC_UUID "B7747AB7-CFE4-45A1-9175-6FCDBFF7834A"
+
+// BLEオブジェクト
+BLEService brushlessService(SERVICE_UUID);
+BLEStringCharacteristic brushlessCharacteristic(CHARACTERISTIC_UUID, BLERead | BLEWrite, 20);
 
 void setup()
 {
-  // シリアル通信の開始
-  Serial.begin(9600);
-  while (!Serial)
-    ;
+  Serial.begin(115200);
 
-  // BLEの初期化
+  targetVolume = STOP_VOLUME;
+
+  // BLE setup
   if (!BLE.begin())
   {
-    Serial.println("BLEの初期化に失敗しました。");
+    Serial.println("Starting BLE failed!");
     while (1)
       ;
   }
 
-  // BLEデバイス名の設定
-  BLE.setDeviceName("MKR1010_BLE");
+  BLE.setLocalName("Brushless_sample");
+  BLE.setAdvertisedService(brushlessService);
 
-  // サービスと特徴の追加
-  BLE.addService(myService);
-  myService.addCharacteristic(myCharacteristic);
+  brushlessService.addCharacteristic(brushlessCharacteristic);
+  BLE.addService(brushlessService);
 
-  // サービスの開始
+  brushlessCharacteristic.writeValue("Hello from Brushless_sample!");
+
   BLE.advertise();
-  Serial.println("BLEデバイスが開始されました。");
+  Serial.println("Waiting for a client connection...");
 }
 
 void loop()
 {
-  // BLEの接続を確認
+  // BLEデバイスの接続を監視
   BLEDevice central = BLE.central();
 
   if (central)
   {
-    Serial.print("デバイスが接続されました: ");
+    Serial.print("Connected to central: ");
     Serial.println(central.address());
 
-    // 接続中にBLEクライアントからデータを受け取る
     while (central.connected())
     {
-      if (myCharacteristic.written())
+      if (brushlessCharacteristic.written())
       {
-        // 受け取ったデータをconst uint8_t配列として取得
-        const uint8_t *receivedData = myCharacteristic.value();
-        size_t len = myCharacteristic.valueLength();
+        receivedValue = brushlessCharacteristic.value();
+        Serial.print("Received Value: ");
+        Serial.println(receivedValue);
 
-        // 受け取ったデータを文字列に変換
-        String receivedString = "";
-        for (size_t i = 0; i < len; i++)
+        if (receivedValue == "0")
         {
-          receivedString += (char)receivedData[i];
+          targetVolume = 1000;
         }
-
-        Serial.print("受信データ: ");
-        Serial.println(receivedString); // シリアルモニタに表示
-
-        // 受け取ったデータに応じて条件分岐
-        if (receivedString == "1")
+        else if (receivedValue.length() > 0)
         {
-          Serial.println("OK"); // 1を受け取った場合
-        }
-        else if (receivedString == "abc")
-        {
-          Serial.println("False"); // abcを受け取った場合
-        }
-        else
-        {
-          Serial.println("Unknown data received");
+          targetVolume = receivedValue.toInt();
+          Serial.print("Updated targetVolume: ");
+          Serial.println(targetVolume);
         }
       }
     }
 
-    // 接続が切れると通知
-    Serial.print("デバイスが切断されました: ");
+    Serial.print("Disconnected from central: ");
     Serial.println(central.address());
   }
 }

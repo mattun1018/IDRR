@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <DynamixelShield.h>
+#include <ArduinoBLE.h>
 
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
@@ -27,6 +28,9 @@ SoftwareSerial soft_serial(7, 8); // DYNAMIXELShield UART RX/TX
 #define MOVING_SPEED_ADDR_LEN 2
 #define TIMEOUT 10 // default communication timeout 10ms
 
+#define SERVICE_UUID "99474AC9-9C46-435D-AAE7-2C4B7E017494"
+#define CHARACTERISTIC_UUID "B7747AB7-CFE4-45A1-9175-6FCDBFF7834A"
+
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
 const float DXL_PROTOCOL_VERSION = 1.0;
@@ -39,7 +43,12 @@ uint16_t calibPosition1 = 517;
 uint16_t calibPosition2 = 517;
 // DXL_ID1の初期位置  512 +90度 820 -90度 204DXL_ID2の初期位置 358 +90度 666 -90度 50
 
+String receivedValue;
+
 DynamixelShield dxl;
+
+BLEService idrrService(SERVICE_UUID);
+BLEStringCharacteristic idrrCharacteristic(CHARACTERISTIC_UUID, BLERead | BLEWrite, 20);
 
 void dxlSetup(uint8_t id)
 {
@@ -102,6 +111,23 @@ void calibDxl(uint8_t id, uint16_t calibPosition)
 void setup()
 {
   DEBUG_SERIAL.begin(115200); // Set debugging port baudrate to 115200bps
+  if (!BLE.begin())
+  {
+    Serial.println("Starting BLE failed!");
+    while (1)
+      ;
+  }
+  BLE.setLocalName("IDRR");
+  BLE.setAdvertisedService(idrrService);
+
+  idrrService.addCharacteristic(idrrCharacteristic);
+  BLE.addService(idrrService);
+
+  idrrCharacteristic.writeValue("Hello from idrr!");
+
+  BLE.advertise();
+  Serial.println("Waiting for a client connection...");
+
   while (!DEBUG_SERIAL)
     ; // Wait until the serial port for terminal is opened
 
@@ -116,44 +142,40 @@ void setup()
 
 void loop()
 {
-  char val = Serial.read();
-  if (val == '1')
+  BLEDevice central = BLE.central();
+  if (central)
   {
-    for (int i = 0; i < 2; i++)
+    Serial.print("Connected to central: ");
+    Serial.println(central.address());
+
+    while (central.connected())
     {
-      controlDxl(DXL_ID2, 109, 925, 517);
-      controlDxl(DXL_ID1, 925, 109, 517);
-      controlDxl(DXL_ID2, 925, 109, 517);
-      controlDxl(DXL_ID1, 109, 925, 517);
+      if (idrrCharacteristic.written())
+      {
+        receivedValue = idrrCharacteristic.value();
+        Serial.print("Received Value: ");
+        Serial.println(receivedValue);
+
+        if (receivedValue == "forward")
+        {
+          for (int i = 0; i < 2; i++)
+          {
+            controlDxl(DXL_ID2, 109, 925, 517);
+            controlDxl(DXL_ID1, 925, 109, 517);
+            controlDxl(DXL_ID2, 925, 109, 517);
+            controlDxl(DXL_ID1, 109, 925, 517);
+          }
+        }
+        else if (receivedValue == "cal")
+        {
+          calibDxl(DXL_ID1, calibPosition1);
+
+          calibDxl(DXL_ID2, calibPosition2);
+        }
+      }
     }
 
-    // controlDxl(DXL_ID1, 820, 204, 512);
-    // controlDxl(DXL_ID2, 50, 666, 358);
-    // controlDxl(DXL_ID1, 204, 820, 512);
-    // controlDxl(DXL_ID2, 666, 50, 358);
-  }
-  if (val == '2')
-  {
-    controlDxl(DXL_ID1, 204, 820, 512);
-
-    controlDxl(DXL_ID2, 50, 666, 358);
-
-    controlDxl(DXL_ID1, 820, 204, 512);
-
-    controlDxl(DXL_ID2, 666, 50, 358);
-
-    controlDxl(DXL_ID1, 820, 204, 512);
-
-    controlDxl(DXL_ID2, 50, 666, 358);
-
-    controlDxl(DXL_ID1, 204, 820, 512);
-
-    controlDxl(DXL_ID2, 666, 50, 358);
-  }
-  if (val == '9')
-  {
-    calibDxl(DXL_ID1, calibPosition1);
-
-    calibDxl(DXL_ID2, calibPosition2);
+    Serial.print("Disconnected from central: ");
+    Serial.println(central.address());
   }
 }
