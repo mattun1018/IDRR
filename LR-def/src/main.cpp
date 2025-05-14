@@ -1,9 +1,10 @@
 #include <Arduino.h>
 #include <DynamixelShield.h>
 
+// ------- シリアル設定 --------
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
-SoftwareSerial soft_serial(7, 8); // DYNAMIXELShield UART RX/TX
+SoftwareSerial soft_serial(7, 8);
 #define DEBUG_SERIAL soft_serial
 #elif defined(ARDUINO_SAM_DUE) || defined(ARDUINO_SAM_ZERO)
 #define DEBUG_SERIAL SerialUSB
@@ -11,153 +12,127 @@ SoftwareSerial soft_serial(7, 8); // DYNAMIXELShield UART RX/TX
 #define DEBUG_SERIAL Serial
 #endif
 
+// ------- DYNAMIXEL定義 --------
+#define DXL_PROTOCOL_VERSION 1.0
+#define TIMEOUT 10
+
+#define TORQUE_ENABLE_ADDR 24
+#define GOAL_POSITION_ADDR 30
+#define PRESENT_POSITION_ADDR 36
+#define MOVING_SPEED_ADDR 32
 #define CW_ANGLE_LIMIT_ADDR 6
 #define CCW_ANGLE_LIMIT_ADDR 8
-#define ANGLE_LIMIT_ADDR_LEN 2
-#define OPERATING_MODE_ADDR_LEN 2
-#define TORQUE_ENABLE_ADDR 24
-#define TORQUE_ENABLE_ADDR_LEN 1
-#define LED_ADDR 25
-#define LED_ADDR_LEN 1
-#define GOAL_POSITION_ADDR 30
-#define GOAL_POSITION_ADDR_LEN 2
-#define PRESENT_POSITION_ADDR 36
-#define PRESENT_POSITION_ADDR_LEN 2
-#define MOVING_SPEED_ADDR 32
-#define MOVING_SPEED_ADDR_LEN 2
-#define TIMEOUT 10 // default communication timeout 10ms
+
+#define ADDR_LEN_1B 1
+#define ADDR_LEN_2B 2
 
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
-const float DXL_PROTOCOL_VERSION = 1.0;
-uint8_t turn_on = 1;
-uint8_t turn_off = 0;
-uint16_t calibSpeed = 1023;
-uint16_t goalPositionLimitMin = 0;
-uint16_t goalPositionLimitMax = 1023;
-uint16_t calibPosition1 = 517;
-uint16_t calibPosition2 = 517;
-uint16_t neutralPosition = 517;
-int defDelay = 1000;
-// DXL_ID1の初期位置  512 +90度 820 -90度 204DXL_ID2の初期位置 358 +90度 666 -90度 50
+
+// ------- 初期設定 --------
+const uint16_t calibSpeed = 1023;
+const uint16_t angleLimitMin = 0;
+const uint16_t angleLimitMax = 1023;
+const uint16_t neutralPosition = 517;
+
+// IDごとのキャリブレーション位置
+const uint16_t calibPositions[] = {517, 517};
 
 DynamixelShield dxl;
 
-void dxlSetup(uint8_t id)
+// ------- 変換関数 --------
+uint16_t angleToValue(float degree)
 {
-  // Turn off torque when configuring items in EEPROM area
-  if (dxl.write(id, TORQUE_ENABLE_ADDR, (uint8_t *)&turn_off, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("DYNAMIXEL Torque off");
-  else
-    DEBUG_SERIAL.println("Error: Torque off failed");
-
-  // Set to Joint Mode
-  if (dxl.write(id, CW_ANGLE_LIMIT_ADDR, (uint8_t *)&goalPositionLimitMin, ANGLE_LIMIT_ADDR_LEN, TIMEOUT) && dxl.write(id, CCW_ANGLE_LIMIT_ADDR, (uint8_t *)&goalPositionLimitMax, ANGLE_LIMIT_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("Set operating mode");
-  else
-    DEBUG_SERIAL.println("Error: Set operating mode failed");
-  delay(200);
-
-  if (dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, MOVING_SPEED_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("Set moving speed");
-  else
-    DEBUG_SERIAL.println("Error: Set moving speed failed");
-  delay(200);
-
-  // Turn on torque
-  if (dxl.write(id, TORQUE_ENABLE_ADDR, (uint8_t *)&turn_on, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("Torque on");
-  else
-    DEBUG_SERIAL.println("Error: Torque on failed");
-  delay(200);
+  return constrain(map(degree, -150, 150, 0, 1023), 0, 1023);
 }
 
-void controlDxl(uint8_t id, uint16_t goalPosition1)
+// ------- 初期設定 --------
+void setupDxl(uint8_t id)
 {
+  uint8_t torque_off = 0;
+  uint8_t torque_on = 1;
 
-  dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, MOVING_SPEED_ADDR_LEN, TIMEOUT);
-  DEBUG_SERIAL.print(id);
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(goalPosition1);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&goalPosition1, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(300);
-
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(neutralPosition);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&neutralPosition, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(1);
-}
-void defcontrolDxl(uint8_t id, uint16_t goalPosition1, int defDelay)
-{
-
-  dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, MOVING_SPEED_ADDR_LEN, TIMEOUT);
-  DEBUG_SERIAL.print(id);
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(goalPosition1);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&goalPosition1, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(defDelay);
-
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(neutralPosition);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&neutralPosition, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(1);
+  dxl.write(id, TORQUE_ENABLE_ADDR, &torque_off, ADDR_LEN_1B, TIMEOUT);
+  dxl.write(id, CW_ANGLE_LIMIT_ADDR, (uint8_t *)&angleLimitMin, ADDR_LEN_2B, TIMEOUT);
+  dxl.write(id, CCW_ANGLE_LIMIT_ADDR, (uint8_t *)&angleLimitMax, ADDR_LEN_2B, TIMEOUT);
+  dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, ADDR_LEN_2B, TIMEOUT);
+  dxl.write(id, TORQUE_ENABLE_ADDR, &torque_on, ADDR_LEN_1B, TIMEOUT);
 }
 
-void calibDxl(uint8_t id, uint16_t calibPosition)
+// ------- 制御 --------
+void moveToPosition(uint8_t id, uint16_t position)
 {
-  DEBUG_SERIAL.print("Calib Position : ");
-  DEBUG_SERIAL.println(calibPosition);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&calibPosition, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(300);
+  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&position, ADDR_LEN_2B, TIMEOUT);
 }
 
+void moveToPositionDegrees(uint8_t id, float degree)
+{
+  moveToPosition(id, angleToValue(degree));
+}
+
+void moveToAndReturn(uint8_t id, uint16_t target, int wait_ms)
+{
+  moveToPosition(id, target);
+  delay(wait_ms);
+  moveToPosition(id, neutralPosition);
+}
+
+void moveToAndReturnDegrees(uint8_t id, float targetDegree, int wait_ms)
+{
+  moveToAndReturn(id, angleToValue(targetDegree), wait_ms);
+}
+
+void calibAll()
+{
+  moveToPosition(DXL_ID1, calibPositions[0]);
+  moveToPosition(DXL_ID2, calibPositions[1]);
+}
+
+// ------- Arduino初期化 --------
 void setup()
 {
-  DEBUG_SERIAL.begin(115200); // Set debugging port baudrate to 115200bps
+  DEBUG_SERIAL.begin(115200);
   while (!DEBUG_SERIAL)
-    ; // Wait until the serial port for terminal is opened
+    ;
 
   dxl.begin(1000000);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
-  dxlSetup(DXL_ID1);
-  dxlSetup(DXL_ID2);
-  calibDxl(DXL_ID1, calibPosition1);
-  calibDxl(DXL_ID2, calibPosition2);
+  setupDxl(DXL_ID1);
+  setupDxl(DXL_ID2);
+
+  calibAll();
 }
 
+// ------- メインループ --------
 void loop()
 {
   char val = Serial.read();
+
   if (val == '1')
   {
     for (int i = 0; i < 2; i++)
     {
-      controlDxl(DXL_ID1, 159);//109
-      controlDxl(DXL_ID2, 875);//925
-      controlDxl(DXL_ID1, 875);//925
-      controlDxl(DXL_ID2, 159);//109
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300);
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300);
     }
-
-    // controlDxl(DXL_ID1, 820, 204, 512);
-    // controlDxl(DXL_ID2, 50, 666, 358);
-    // controlDxl(DXL_ID1, 204, 820, 512);
-    // controlDxl(DXL_ID2, 666, 50, 358);
   }
+
   if (val == '2')
   {
     for (int i = 0; i < 2; i++)
     {
-      defcontrolDxl(DXL_ID1, 109, 1000);
-      defcontrolDxl(DXL_ID2, 925, 300);
-      defcontrolDxl(DXL_ID1, 925, 1000);
-      defcontrolDxl(DXL_ID2, 109, 300);
+      moveToAndReturnDegrees(DXL_ID1, -120, 1000);
+      moveToAndReturnDegrees(DXL_ID2, +120, 300);
+      moveToAndReturnDegrees(DXL_ID1, +120, 1000);
+      moveToAndReturnDegrees(DXL_ID2, -120, 300);
     }
   }
+
   if (val == '9')
   {
-    calibDxl(DXL_ID1, calibPosition1);
-
-    calibDxl(DXL_ID2, calibPosition2);
+    calibAll();
   }
 }
