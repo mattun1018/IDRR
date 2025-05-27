@@ -142,13 +142,35 @@ void handleCommand(const String &cmd)
       moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
     }
   }
+  else if (cmd == "wave_return")
+  {
+    // 第1フェーズ：往復
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+    }
+
+    // 第2フェーズ：逆方向に戻す
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+    }
+
+    DEBUG_SERIAL.println("Executed wave_return");
+  }
   else if (cmd == "wave_large")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturnDegrees(DXL_ID1, -120, 1000, true);
+      moveToAndReturnDegrees(DXL_ID1, -120, 300, true);
       moveToAndReturnDegrees(DXL_ID2, +120, 300, true);
-      moveToAndReturnDegrees(DXL_ID1, +120, 1000, true);
+      moveToAndReturnDegrees(DXL_ID1, +120, 300, true);
       moveToAndReturnDegrees(DXL_ID2, -120, 300, true);
     }
   }
