@@ -132,7 +132,7 @@ void updateAltMotion()
 // --- 共通コマンド処理 ---
 void handleCommand(const String &cmd)
 {
-  if (cmd == "wave_small")
+  if (cmd == "wave_forward")
   {
     for (int i = 0; i < 2; i++)
     {
@@ -140,6 +140,16 @@ void handleCommand(const String &cmd)
       moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
       moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
       moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+    }
+  }
+  else if (cmd == "wave_back")
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
     }
   }
   else if (cmd == "wave_return")
@@ -152,14 +162,14 @@ void handleCommand(const String &cmd)
       moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
       moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
     }
-
+    delay(1000);
     // 第2フェーズ：逆方向に戻す
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
       moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
       moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
     }
 
     DEBUG_SERIAL.println("Executed wave_return");
