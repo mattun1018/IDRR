@@ -1,9 +1,11 @@
 #include <Arduino.h>
 #include <DynamixelShield.h>
+#include <ArduinoBLE.h>
 
+// --- シリアル設定 ---
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
-SoftwareSerial soft_serial(7, 8); // DYNAMIXELShield UART RX/TX
+SoftwareSerial soft_serial(7, 8);
 #define DEBUG_SERIAL soft_serial
 #elif defined(ARDUINO_SAM_DUE) || defined(ARDUINO_SAM_ZERO)
 #define DEBUG_SERIAL SerialUSB
@@ -11,153 +13,281 @@ SoftwareSerial soft_serial(7, 8); // DYNAMIXELShield UART RX/TX
 #define DEBUG_SERIAL Serial
 #endif
 
-#define CW_ANGLE_LIMIT_ADDR 6
-#define CCW_ANGLE_LIMIT_ADDR 8
-#define ANGLE_LIMIT_ADDR_LEN 2
-#define OPERATING_MODE_ADDR_LEN 2
-#define TORQUE_ENABLE_ADDR 24
-#define TORQUE_ENABLE_ADDR_LEN 1
-#define LED_ADDR 25
-#define LED_ADDR_LEN 1
-#define GOAL_POSITION_ADDR 30
-#define GOAL_POSITION_ADDR_LEN 2
-#define PRESENT_POSITION_ADDR 36
-#define PRESENT_POSITION_ADDR_LEN 2
-#define MOVING_SPEED_ADDR 32
-#define MOVING_SPEED_ADDR_LEN 2
-#define TIMEOUT 10 // default communication timeout 10ms
+// --- DYNAMIXEL定義（XL430用：Protocol 2.0） ---
+#define DXL_PROTOCOL_VERSION 2.0
+#define TIMEOUT 10
+
+#define TORQUE_ENABLE_ADDR 64
+#define GOAL_POSITION_ADDR 116
+#define VELOCITY_ADDR 104
+#define ADDR_LEN_1B 1
+#define ADDR_LEN_2B 2
+#define ADDR_LEN_4B 4
 
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
-const float DXL_PROTOCOL_VERSION = 1.0;
-uint8_t turn_on = 1;
-uint8_t turn_off = 0;
-uint16_t calibSpeed = 1023;
-uint16_t goalPositionLimitMin = 0;
-uint16_t goalPositionLimitMax = 1023;
-uint16_t calibPosition1 = 517;
-uint16_t calibPosition2 = 517;
-uint16_t neutralPosition = 517;
-int defDelay = 1000;
-// DXL_ID1の初期位置  512 +90度 820 -90度 204DXL_ID2の初期位置 358 +90度 666 -90度 50
+
+const uint32_t calibSpeed = 200; // 約45 rpm
+const uint16_t angleLimitMin = 0;
+const uint16_t angleLimitMax = 4095;
+const uint16_t neutralPosition = 2048;
+const uint16_t calibPositions[] = {2048, 2048};
 
 DynamixelShield dxl;
 
-void dxlSetup(uint8_t id)
+// BLE定義
+BLEService controlService("180C");
+BLECharacteristic commandChar("2A56", BLEWrite, 20);
+
+// --- 補助関数 ---
+uint16_t angleToValue(float degree)
 {
-  // Turn off torque when configuring items in EEPROM area
-  if (dxl.write(id, TORQUE_ENABLE_ADDR, (uint8_t *)&turn_off, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("DYNAMIXEL Torque off");
-  else
-    DEBUG_SERIAL.println("Error: Torque off failed");
-
-  // Set to Joint Mode
-  if (dxl.write(id, CW_ANGLE_LIMIT_ADDR, (uint8_t *)&goalPositionLimitMin, ANGLE_LIMIT_ADDR_LEN, TIMEOUT) && dxl.write(id, CCW_ANGLE_LIMIT_ADDR, (uint8_t *)&goalPositionLimitMax, ANGLE_LIMIT_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("Set operating mode");
-  else
-    DEBUG_SERIAL.println("Error: Set operating mode failed");
-  delay(200);
-
-  if (dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, MOVING_SPEED_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("Set moving speed");
-  else
-    DEBUG_SERIAL.println("Error: Set moving speed failed");
-  delay(200);
-
-  // Turn on torque
-  if (dxl.write(id, TORQUE_ENABLE_ADDR, (uint8_t *)&turn_on, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
-    DEBUG_SERIAL.println("Torque on");
-  else
-    DEBUG_SERIAL.println("Error: Torque on failed");
-  delay(200);
+  return constrain(map(degree, -180, 180, 0, 4095), 0, 4095);
 }
 
-void controlDxl(uint8_t id, uint16_t goalPosition1)
+void setupDxl(uint8_t id)
 {
-
-  dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, MOVING_SPEED_ADDR_LEN, TIMEOUT);
-  DEBUG_SERIAL.print(id);
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(goalPosition1);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&goalPosition1, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(300);
-
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(neutralPosition);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&neutralPosition, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(1);
-}
-void defcontrolDxl(uint8_t id, uint16_t goalPosition1, int defDelay)
-{
-
-  dxl.write(id, MOVING_SPEED_ADDR, (uint8_t *)&calibSpeed, MOVING_SPEED_ADDR_LEN, TIMEOUT);
-  DEBUG_SERIAL.print(id);
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(goalPosition1);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&goalPosition1, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(defDelay);
-
-  DEBUG_SERIAL.print("Goal Position : ");
-  DEBUG_SERIAL.println(neutralPosition);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&neutralPosition, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(1);
+  uint8_t torque_off = 0, torque_on = 1;
+  dxl.write(id, TORQUE_ENABLE_ADDR, &torque_off, ADDR_LEN_1B, TIMEOUT);
+  dxl.write(id, VELOCITY_ADDR, (uint8_t *)&calibSpeed, ADDR_LEN_4B, TIMEOUT);
+  dxl.write(id, TORQUE_ENABLE_ADDR, &torque_on, ADDR_LEN_1B, TIMEOUT);
 }
 
-void calibDxl(uint8_t id, uint16_t calibPosition)
+void moveToPosition(uint8_t id, uint16_t pos)
 {
-  DEBUG_SERIAL.print("Calib Position : ");
-  DEBUG_SERIAL.println(calibPosition);
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&calibPosition, GOAL_POSITION_ADDR_LEN, TIMEOUT);
-  delay(300);
+  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&pos, ADDR_LEN_4B, TIMEOUT);
+}
+void moveToPositionDegrees(uint8_t id, float deg)
+{
+  moveToPosition(id, angleToValue(deg));
+}
+void moveToAndReturn(uint8_t id, uint16_t pos, int wait_ms, bool ret)
+{
+  moveToPosition(id, pos);
+  delay(wait_ms);
+  if (ret)
+    moveToPosition(id, neutralPosition);
+}
+void moveToAndReturnDegrees(uint8_t id, float deg, int wait_ms, bool ret)
+{
+  moveToAndReturn(id, angleToValue(deg), wait_ms, ret);
+}
+void calibAll()
+{
+  moveToPosition(DXL_ID1, calibPositions[0]);
+  moveToPosition(DXL_ID2, calibPositions[1]);
 }
 
+// 非同期交互動作用
+enum AltState
+{
+  ALT_IDLE,
+  ALT_M1_FORWARD,
+  ALT_M2_FORWARD,
+  ALT_M1_BACK,
+  ALT_M2_BACK
+};
+AltState altState = ALT_IDLE;
+unsigned long altStartTime = 0;
+const unsigned long altInterval = 500;
+bool altMotionActive = false;
+
+void updateAltMotion()
+{
+  if (!altMotionActive)
+    return;
+  unsigned long now = millis();
+  if (now - altStartTime >= altInterval)
+  {
+    altStartTime = now;
+    switch (altState)
+    {
+    case ALT_M1_FORWARD:
+      moveToPositionDegrees(DXL_ID1, -90);
+      DEBUG_SERIAL.println("Motor1 → -90");
+      altState = ALT_M2_FORWARD;
+      break;
+    case ALT_M2_FORWARD:
+      moveToPositionDegrees(DXL_ID2, 90);
+      DEBUG_SERIAL.println("Motor2 → 90");
+      altState = ALT_M1_BACK;
+      break;
+    case ALT_M1_BACK:
+      moveToPositionDegrees(DXL_ID1, 90);
+      DEBUG_SERIAL.println("Motor1 → 90");
+      altState = ALT_M2_BACK;
+      break;
+    case ALT_M2_BACK:
+      moveToPositionDegrees(DXL_ID2, -90);
+      DEBUG_SERIAL.println("Motor2 → -90");
+      altState = ALT_M1_FORWARD;
+      break;
+    default:
+      break;
+    }
+  }
+}
+
+// --- 共通コマンド処理 ---
+void handleCommand(const String &cmd)
+{
+  if (cmd == "wave_forward")
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+    }
+  }
+  else if (cmd == "wave_back")
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+    }
+  }
+  else if (cmd == "wave_return")
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+    }
+    delay(1000);
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
+      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+    }
+    DEBUG_SERIAL.println("Executed wave_return");
+  }
+  else if (cmd == "wave_large")
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturnDegrees(DXL_ID1, -120, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, +120, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, +120, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, -120, 300, true);
+    }
+  }
+  else if (cmd == "wave_random")
+  {
+    for (int i = 0; i < 5; i++)
+    {
+      float a1 = random(-120, 121);
+      float a2 = random(-120, 121);
+      int d1 = random(200, 800);
+      int d2 = random(200, 800);
+      moveToAndReturnDegrees(DXL_ID1, a1, d1, false);
+      moveToAndReturnDegrees(DXL_ID2, a2, d2, true);
+    }
+  }
+  else if (cmd == "wave_left")
+  {
+    moveToAndReturnDegrees(DXL_ID1, -90, 2000, false);
+    moveToAndReturnDegrees(DXL_ID2, 90, 1000, true);
+  }
+  else if (cmd == "start_async")
+  {
+    altMotionActive = true;
+    altState = ALT_M1_FORWARD;
+    altStartTime = millis();
+    DEBUG_SERIAL.println("Async alternating motion started");
+  }
+  else if (cmd == "stop_async")
+  {
+    altMotionActive = false;
+    altState = ALT_IDLE;
+    moveToPosition(DXL_ID1, neutralPosition);
+    moveToPosition(DXL_ID2, neutralPosition);
+    DEBUG_SERIAL.println("Async alternating motion stopped");
+  }
+  else if (cmd == "calibrate")
+  {
+    calibAll();
+  }
+  else if (cmd.startsWith("set_1_"))
+  {
+    float angle = cmd.substring(6).toFloat();
+    moveToPositionDegrees(DXL_ID1, angle);
+    DEBUG_SERIAL.print("Motor1 set to angle: ");
+    DEBUG_SERIAL.println(angle);
+  }
+  else if (cmd.startsWith("set_2_"))
+  {
+    float angle = cmd.substring(6).toFloat();
+    moveToPositionDegrees(DXL_ID2, angle);
+    DEBUG_SERIAL.print("Motor2 set to angle: ");
+    DEBUG_SERIAL.println(angle);
+  }
+}
+
+// --- setup ---
 void setup()
 {
-  DEBUG_SERIAL.begin(115200); // Set debugging port baudrate to 115200bps
-  while (!DEBUG_SERIAL)
-    ; // Wait until the serial port for terminal is opened
-
-  dxl.begin(1000000);
+  DEBUG_SERIAL.begin(115200);
+  DXL_SERIAL.begin(57600); // ← これで試す
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+  setupDxl(DXL_ID1);
+  setupDxl(DXL_ID2);
+  calibAll();
 
-  dxlSetup(DXL_ID1);
-  dxlSetup(DXL_ID2);
-  calibDxl(DXL_ID1, calibPosition1);
-  calibDxl(DXL_ID2, calibPosition2);
+  // BLEセットアップ
+  if (!BLE.begin())
+  {
+    DEBUG_SERIAL.println("BLE init failed");
+    while (1)
+      ;
+  }
+  BLE.setLocalName("DynamixelCtrl");
+  BLE.setAdvertisedService(controlService);
+  controlService.addCharacteristic(commandChar);
+  BLE.addService(controlService);
+  commandChar.writeValue("");
+  BLE.advertise();
+  DEBUG_SERIAL.println("BLE Ready");
 }
 
+// --- loop ---
 void loop()
 {
+  updateAltMotion();
+
   char val = Serial.read();
-  if (val == '1')
+  if (val > 0)
   {
-    for (int i = 0; i < 2; i++)
+    String cmd(1, val);
+    handleCommand(cmd);
+  }
+
+  BLEDevice central = BLE.central();
+  if (central)
+  {
+    DEBUG_SERIAL.print("Connected to: ");
+    DEBUG_SERIAL.println(central.address());
+
+    while (central.connected())
     {
-      controlDxl(DXL_ID1, 159);//109
-      controlDxl(DXL_ID2, 875);//925
-      controlDxl(DXL_ID1, 875);//925
-      controlDxl(DXL_ID2, 159);//109
+      updateAltMotion();
+      if (commandChar.written())
+      {
+        String cmd = String((const char *)commandChar.value(), commandChar.valueLength());
+        DEBUG_SERIAL.print("BLE受信: ");
+        DEBUG_SERIAL.println(cmd);
+        handleCommand(cmd);
+      }
     }
 
-    // controlDxl(DXL_ID1, 820, 204, 512);
-    // controlDxl(DXL_ID2, 50, 666, 358);
-    // controlDxl(DXL_ID1, 204, 820, 512);
-    // controlDxl(DXL_ID2, 666, 50, 358);
-  }
-  if (val == '2')
-  {
-    for (int i = 0; i < 2; i++)
-    {
-      defcontrolDxl(DXL_ID1, 109, 1000);
-      defcontrolDxl(DXL_ID2, 925, 300);
-      defcontrolDxl(DXL_ID1, 925, 1000);
-      defcontrolDxl(DXL_ID2, 109, 300);
-    }
-  }
-  if (val == '9')
-  {
-    calibDxl(DXL_ID1, calibPosition1);
-
-    calibDxl(DXL_ID2, calibPosition2);
+    DEBUG_SERIAL.println("Disconnected");
   }
 }
