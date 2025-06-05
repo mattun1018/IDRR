@@ -16,7 +16,7 @@
 
 // その他の初期設定
 #define DXL_SERIAL Serial2              // 使うシリアル系統
-const uint8_t DXL_DIR_PIN = 32;          // 半二重回路用のENピン
+const uint8_t DXL_DIR_PIN = 32;         // 半二重回路用のENピン
 uint32_t centerPosition = 2048;         // サーボ位置のセンター値
 uint32_t goalPosition = 0;              // サーボの目標位置
 float radiansval = 0.0;                 // サインカーブ算出用のラジアン値
@@ -41,7 +41,7 @@ void led_off()
 
 void setup()
 {
-  dxl.begin(115200); // デフォルトのbaudrate. 必要に応じてサーボの設定にあわせる.
+  dxl.begin(57600); // デフォルトのbaudrate. 必要に応じてサーボの設定にあわせる.
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
   // サーボの初期設定時はトルクオフ
