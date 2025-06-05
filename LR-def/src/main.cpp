@@ -125,6 +125,24 @@ void handleCommand(const String &cmd)
       moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
     }
   }
+  else if (cmd == "wave_return")
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+    }
+    delay(1000);
+    for (int i = 0; i < 2; i++)
+    {
+      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+    }
+  }
   else if (cmd == "wave_back")
   {
     for (int i = 0; i < 2; i++)
