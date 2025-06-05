@@ -2,7 +2,6 @@
 #include <DynamixelShield.h>
 #include <ArduinoBLE.h>
 
-// --- シリアル設定 ---
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
 SoftwareSerial soft_serial(7, 8);
@@ -13,72 +12,45 @@ SoftwareSerial soft_serial(7, 8);
 #define DEBUG_SERIAL Serial
 #endif
 
-// --- DYNAMIXEL定義（XL430用：Protocol 2.0） ---
-#define DXL_PROTOCOL_VERSION 2.0
-#define TIMEOUT 10
-
-#define TORQUE_ENABLE_ADDR 64
-#define GOAL_POSITION_ADDR 116
-#define VELOCITY_ADDR 104
-#define ADDR_LEN_1B 1
-#define ADDR_LEN_2B 2
-#define ADDR_LEN_4B 4
-
-const uint8_t DXL_ID1 = 1;
-const uint8_t DXL_ID2 = 2;
-
-const uint32_t calibSpeed = 200; // 約45 rpm
-const uint16_t angleLimitMin = 0;
-const uint16_t angleLimitMax = 4095;
-const uint16_t neutralPosition = 2048;
-const uint16_t calibPositions[] = {2048, 2048};
-
 DynamixelShield dxl;
+using namespace ControlTableItem;
 
-// BLE定義
+#define DXL_ID1 1
+#define DXL_ID2 2
+
 BLEService controlService("180C");
 BLECharacteristic commandChar("2A56", BLEWrite, 20);
 
-// --- 補助関数 ---
-uint16_t angleToValue(float degree)
-{
-  return constrain(map(degree, -180, 180, 0, 4095), 0, 4095);
-}
+const float neutralDeg = 180.0;
 
+// --- セットアップ関数 ---
 void setupDxl(uint8_t id)
 {
-  uint8_t torque_off = 0, torque_on = 1;
-  dxl.write(id, TORQUE_ENABLE_ADDR, &torque_off, ADDR_LEN_1B, TIMEOUT);
-  dxl.write(id, VELOCITY_ADDR, (uint8_t *)&calibSpeed, ADDR_LEN_4B, TIMEOUT);
-  dxl.write(id, TORQUE_ENABLE_ADDR, &torque_on, ADDR_LEN_1B, TIMEOUT);
+  dxl.torqueOff(id);
+  dxl.setOperatingMode(id, OP_POSITION);
+  dxl.torqueOn(id);
 }
 
-void moveToPosition(uint8_t id, uint16_t pos)
-{
-  dxl.write(id, GOAL_POSITION_ADDR, (uint8_t *)&pos, ADDR_LEN_4B, TIMEOUT);
-}
 void moveToPositionDegrees(uint8_t id, float deg)
 {
-  moveToPosition(id, angleToValue(deg));
-}
-void moveToAndReturn(uint8_t id, uint16_t pos, int wait_ms, bool ret)
-{
-  moveToPosition(id, pos);
-  delay(wait_ms);
-  if (ret)
-    moveToPosition(id, neutralPosition);
-}
-void moveToAndReturnDegrees(uint8_t id, float deg, int wait_ms, bool ret)
-{
-  moveToAndReturn(id, angleToValue(deg), wait_ms, ret);
-}
-void calibAll()
-{
-  moveToPosition(DXL_ID1, calibPositions[0]);
-  moveToPosition(DXL_ID2, calibPositions[1]);
+  dxl.setGoalPosition(id, deg, UNIT_DEGREE);
 }
 
-// 非同期交互動作用
+void moveToAndReturnDegrees(uint8_t id, float deg, int wait_ms, bool ret)
+{
+  moveToPositionDegrees(id, deg);
+  delay(wait_ms);
+  if (ret)
+    moveToPositionDegrees(id, neutralDeg);
+}
+
+void calibAll()
+{
+  moveToPositionDegrees(DXL_ID1, neutralDeg);
+  moveToPositionDegrees(DXL_ID2, neutralDeg);
+}
+
+// --- 非同期交互動作用 ---
 enum AltState
 {
   ALT_IDLE,
@@ -128,55 +100,54 @@ void updateAltMotion()
   }
 }
 
-// --- 共通コマンド処理 ---
+// --- コマンド処理 ---
 void handleCommand(const String &cmd)
 {
   if (cmd == "wave_forward")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
-      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
     }
   }
   else if (cmd == "wave_back")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
     }
   }
   else if (cmd == "wave_return")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
-      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
+      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
     }
     delay(1000);
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturn(DXL_ID2, angleToValue(-90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID2, angleToValue(+90), 300, true);
-      moveToAndReturn(DXL_ID1, angleToValue(-90), 300, true);
+      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
     }
-    DEBUG_SERIAL.println("Executed wave_return");
   }
   else if (cmd == "wave_large")
   {
     for (int i = 0; i < 2; i++)
     {
       moveToAndReturnDegrees(DXL_ID1, -120, 300, true);
-      moveToAndReturnDegrees(DXL_ID2, +120, 300, true);
-      moveToAndReturnDegrees(DXL_ID1, +120, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 120, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 120, 300, true);
       moveToAndReturnDegrees(DXL_ID2, -120, 300, true);
     }
   }
@@ -208,8 +179,7 @@ void handleCommand(const String &cmd)
   {
     altMotionActive = false;
     altState = ALT_IDLE;
-    moveToPosition(DXL_ID1, neutralPosition);
-    moveToPosition(DXL_ID2, neutralPosition);
+    calibAll();
     DEBUG_SERIAL.println("Async alternating motion stopped");
   }
   else if (cmd == "calibrate")
@@ -236,13 +206,12 @@ void handleCommand(const String &cmd)
 void setup()
 {
   DEBUG_SERIAL.begin(115200);
-  DXL_SERIAL.begin(57600); // ← これで試す
-  dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+  dxl.begin(115200); // もしくは 57600
+  dxl.setPortProtocolVersion(2.0);
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
   calibAll();
 
-  // BLEセットアップ
   if (!BLE.begin())
   {
     DEBUG_SERIAL.println("BLE init failed");
@@ -287,7 +256,6 @@ void loop()
         handleCommand(cmd);
       }
     }
-
     DEBUG_SERIAL.println("Disconnected");
   }
 }
