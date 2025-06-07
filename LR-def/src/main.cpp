@@ -21,7 +21,7 @@ using namespace ControlTableItem;
 BLEService controlService("180C");
 BLECharacteristic commandChar("2A56", BLEWrite, 20);
 
-const float neutralDeg = 180.0;
+const float neutralDeg = 0.0;
 
 // --- セットアップ関数 ---
 void setupDxl(uint8_t id)
@@ -33,7 +33,22 @@ void setupDxl(uint8_t id)
 
 void moveToPositionDegrees(uint8_t id, float deg)
 {
-  dxl.setGoalPosition(id, deg, UNIT_DEGREE);
+  // 角度範囲の制限
+  if (deg < -180.0)
+    deg = -180.0;
+  if (deg > 180.0)
+    deg = 180.0;
+
+  // Dynamixel内部単位へ変換（中心が2048）
+  const float DEGREE_TO_UNIT = 11.377777; // ＝4095 / 360
+  const int CENTER_POSITION = 2048;
+
+  int pos = CENTER_POSITION + int(deg * DEGREE_TO_UNIT);
+
+  // 安全に制限（オーバーフロー防止）
+  pos = constrain(pos, 0, 4095);
+
+  dxl.setGoalPosition(id, pos, UNIT_RAW);
 }
 
 void moveToAndReturnDegrees(uint8_t id, float deg, int wait_ms, bool ret)
