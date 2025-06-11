@@ -231,7 +231,7 @@ void setup()
   Serial.begin(115200);
 
   // Dynamixel 初期化
-  dxl.begin(115200); // 必要に応じて 57600 に変更
+  dxl.begin(57600); // 必要に応じて 115200 に変更
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
