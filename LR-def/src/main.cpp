@@ -221,7 +221,7 @@ void handleCommand(const String &cmd)
 void setup()
 {
   DEBUG_SERIAL.begin(115200);
-  dxl.begin(115200); // もしくは 57600
+  dxl.begin(57600); // もしくは 115200
   dxl.setPortProtocolVersion(2.0);
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
