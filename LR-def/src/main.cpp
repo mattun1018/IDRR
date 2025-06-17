@@ -5,8 +5,8 @@
 #include <BLEServer.h>
 
 // =================== DYNAMIXEL 設定 ===================
-#define DXL_SERIAL Serial2 // Serial2の場合の端子はDXL~V_1~を使う。Serial1の場合はDXL~V_2~
-const uint8_t DXL_DIR_PIN = 4;
+#define DXL_SERIAL Serial2
+const uint8_t DXL_DIR_PIN = 4; // DXL~V_2~を使う際は33
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
 const float DXL_PROTOCOL_VERSION = 2.0;
@@ -229,6 +229,8 @@ class CommandCallback : public BLECharacteristicCallbacks
 void setup()
 {
   Serial.begin(115200);
+  // DXL~V_2~を使う際には以下のコメントアウトを外す
+  //  Serial2.begin(57600, SERIAL_8N1, 32, 27);
 
   // Dynamixel 初期化
   dxl.begin(57600); // 必要に応じて 115200 に変更
