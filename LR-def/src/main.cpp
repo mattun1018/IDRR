@@ -5,7 +5,7 @@
 #include <BLEServer.h>
 
 // =================== DYNAMIXEL 設定 ===================
-#define DXL_SERIAL Serial2
+#define DXL_SERIAL Serial2 // Serial2の場合の端子はDXL~V_1~を使う。Serial1の場合はDXL~V_2~
 const uint8_t DXL_DIR_PIN = 4;
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
