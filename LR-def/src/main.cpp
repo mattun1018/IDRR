@@ -4,14 +4,21 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
+// =================== ピン設定 (ESP32-C3 SuperMini用) ===================
+// Dynamixelとの通信に使用するシリアルポートとピンを指定します
+// ESP32-C3にはSerial2がないため、Serial1を使用します
+#define DXL_SERIAL Serial1
+const int DXL_RX_PIN = 8;      // Serial1のRXピン
+const int DXL_TX_PIN = 9;      // Serial1のTXピン
+const uint8_t DXL_DIR_PIN = 4; // モーターの方向制御ピン
+
 // =================== DYNAMIXEL 設定 ===================
-#define DXL_SERIAL Serial2
-const uint8_t DXL_DIR_PIN = 4; // DXL~V_2~を使う際は33
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
 const float DXL_PROTOCOL_VERSION = 2.0;
 const float neutralDeg = 0.0;
 
+// Dynamixel2Arduinoのインスタンスを作成
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
 // =================== BLE 設定 ===================
@@ -115,6 +122,7 @@ void handleCommand(const String &cmd)
   Serial.print("BLEコマンド受信: ");
   Serial.println(cmd);
 
+  // 各コマンドに対応する動作
   if (cmd == "wave_forward")
   {
     for (int i = 0; i < 2; i++)
@@ -229,18 +237,25 @@ class CommandCallback : public BLECharacteristicCallbacks
 void setup()
 {
   Serial.begin(115200);
-  // DXL~V_2~を使う際には以下のコメントアウトを外す
-  //  Serial2.begin(57600, SERIAL_8N1, 32, 27);
 
-  // Dynamixel 初期化
-  dxl.begin(57600); // 必要に応じて 115200 に変更
+  // --- MODIFIED FOR ESP32-C3 ---
+  // Dynamixel通信用のシリアルポート(Serial1)を、指定したピンで初期化
+  DXL_SERIAL.begin(57600, SERIAL_8N1, DXL_RX_PIN, DXL_TX_PIN);
+
+  // Dynamixelライブラリを初期化
+  // dxl.begin()はシリアルポートのボーレートのみを設定するため、begin()の前に
+  // シリアルポート自体の初期化が必要です。
+  dxl.begin(57600);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+
+  // 各モーターをセットアップ
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
   calibAll();
+  Serial.println("Dynamixel Motors Initialized.");
 
   // BLE 初期化
-  BLEDevice::init("DynamixelCtrlESP32");
+  BLEDevice::init("DynamixelCtrlESP32-C3");
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
