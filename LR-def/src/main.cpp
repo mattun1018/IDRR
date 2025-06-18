@@ -4,13 +4,14 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
-// =================== DYNAMIXEL 設定 ===================
+// =================== DYNAMIXEL 設定 (AX-12A用に変更) ===================
 #define DXL_SERIAL Serial2
-const uint8_t DXL_DIR_PIN = 4; // DXL~V_2~を使う際は33
+const uint8_t DXL_DIR_PIN = 4; // DXLシールドや回路構成に合わせて変更してください
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
-const float DXL_PROTOCOL_VERSION = 2.0;
-const float neutralDeg = 0.0;
+// AX-12Aはプロトコル1.0を使用します
+const float DXL_PROTOCOL_VERSION = 1.0;
+const float neutralDeg = 0.0; // 中央位置の角度
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -38,26 +39,28 @@ bool altMotionActive = false;
 void setupDxl(uint8_t id)
 {
   dxl.torqueOff(id);
-  dxl.setOperatingMode(id, OP_POSITION);
+  dxl.setOperatingMode(id, OP_POSITION); // ライブラリがプロトコル1.0に合わせて関節モードに設定します
   dxl.torqueOn(id);
 }
 
+// AX-12A用に角度計算を修正した関数
 void moveToPositionDegrees(uint8_t id, float deg)
 {
-  // 角度範囲の制限
-  if (deg < -180.0)
-    deg = -180.0;
-  if (deg > 180.0)
-    deg = 180.0;
+  // AX-12Aの動作範囲 (-150度から150度) に角度を制限
+  if (deg < -150.0)
+    deg = -150.0;
+  if (deg > 150.0)
+    deg = 150.0;
 
-  // Dynamixel内部単位へ変換（中心が2048）
-  const float DEGREE_TO_UNIT = 11.377777; // ＝4095 / 360
-  const int CENTER_POSITION = 2048;
+  // Dynamixel内部単位へ変換（AX-12A用）
+  // 分解能: 1024 (0-1023), 動作範囲: 300度
+  const float DEGREE_TO_UNIT = 1023.0 / 300.0; // 約3.41
+  const int CENTER_POSITION = 512;             // 1024 / 2
 
   int pos = CENTER_POSITION + int(deg * DEGREE_TO_UNIT);
 
-  // 安全に制限（オーバーフロー防止）
-  pos = constrain(pos, 0, 4095);
+  // 安全に制限（0から1023の範囲に収める）
+  pos = constrain(pos, 0, 1023);
 
   dxl.setGoalPosition(id, pos, UNIT_RAW);
 }
@@ -115,6 +118,10 @@ void handleCommand(const String &cmd)
   Serial.print("BLEコマンド受信: ");
   Serial.println(cmd);
 
+  // 既存のモーションコマンドは、moveToPositionDegreesがAX-12A用に変更されたため、そのまま動作します。
+  // ただし、wave_largeやwave_randomの角度がAX-12Aの可動範囲(-150〜150度)を超えないように注意してください。
+  // 現在の-120〜120度の範囲は問題ありません。
+
   if (cmd == "wave_forward")
   {
     for (int i = 0; i < 2; i++)
@@ -157,6 +164,7 @@ void handleCommand(const String &cmd)
   {
     for (int i = 0; i < 2; i++)
     {
+      // 角度がAX-12Aの範囲内であることを確認
       moveToAndReturnDegrees(DXL_ID1, -120, 300, true);
       moveToAndReturnDegrees(DXL_ID2, 120, 300, true);
       moveToAndReturnDegrees(DXL_ID1, 120, 300, true);
@@ -167,6 +175,7 @@ void handleCommand(const String &cmd)
   {
     for (int i = 0; i < 5; i++)
     {
+      // -120〜120の範囲はAX-12Aでも安全です
       float a1 = random(-120, 121);
       float a2 = random(-120, 121);
       int d1 = random(200, 800);
@@ -229,18 +238,21 @@ class CommandCallback : public BLECharacteristicCallbacks
 void setup()
 {
   Serial.begin(115200);
-  // DXL~V_2~を使う際には以下のコメントアウトを外す
-  //  Serial2.begin(57600, SERIAL_8N1, 32, 27);
+  // ESP32のハードウェアシリアル(Serial2)のデフォルトピンは GPIO 16(RX), 17(TX) です。
+  // 必要に応じてピンを指定してbeginを呼び出してください。
+  // 例: Serial2.begin(57600, SERIAL_8N1, 32, 27);
 
   // Dynamixel 初期化
-  dxl.begin(57600); // 必要に応じて 115200 に変更
+  // AX-12Aのボーレートは工場出荷時1,000,000の場合があります。
+  // モーターが動かない場合は 1000000 に変更してみてください。
+  dxl.begin(57600);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
   calibAll();
 
   // BLE 初期化
-  BLEDevice::init("DynamixelCtrlESP32");
+  BLEDevice::init("DynamixelCtrlESP32_AX12A"); // デバイス名を変更
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
@@ -251,11 +263,11 @@ void setup()
 
   pService->start();
   BLEDevice::getAdvertising()->start();
-  Serial.println("BLE Ready. Connect and write commands.");
+  Serial.println("BLE Ready for AX-12A. Connect and write commands.");
 }
 
 // =================== loop ===================
 void loop()
 {
-  updateAltMotion();
+  updateAltMotion(); // 非同期動作の更新
 }
