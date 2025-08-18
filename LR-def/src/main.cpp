@@ -10,7 +10,7 @@ const uint8_t DXL_DIR_PIN = 33;
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
 const float DXL_PROTOCOL_VERSION = 2.0;
-const float neutralDeg = 0.0;
+const float neutralDeg = 5.0; // calibrateで戻す角度は0度に設定
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -44,17 +44,15 @@ void setupDxl(uint8_t id)
 
 void moveToPositionDegrees(uint8_t id, float deg)
 {
-  // 角度範囲の制限
-  if (deg < -180.0)
-    deg = -180.0;
-  if (deg > 180.0)
-    deg = 180.0;
+  // 角度範囲を0〜360に制限
+  if (deg < 0.0)
+    deg = 0.0;
+  if (deg > 360.0)
+    deg = 360.0;
 
-  // Dynamixel内部単位へ変換（中心が2048）
+  // Dynamixel内部単位へ変換 (0°→0, 360°→4095)
   const float DEGREE_TO_UNIT = 11.377777; // ＝4095 / 360
-  const int CENTER_POSITION = 2048;
-
-  int pos = CENTER_POSITION + int(deg * DEGREE_TO_UNIT);
+  int pos = int(deg * DEGREE_TO_UNIT);
 
   // 安全に制限（オーバーフロー防止）
   pos = constrain(pos, 0, 4095);
@@ -88,19 +86,19 @@ void updateAltMotion()
     switch (altState)
     {
     case ALT_M1_FORWARD:
-      moveToPositionDegrees(DXL_ID1, -90);
+      moveToPositionDegrees(DXL_ID1, 270); // -90° → 270°
       altState = ALT_M2_FORWARD;
       break;
     case ALT_M2_FORWARD:
-      moveToPositionDegrees(DXL_ID2, 90);
+      moveToPositionDegrees(DXL_ID2, 90); // +90°
       altState = ALT_M1_BACK;
       break;
     case ALT_M1_BACK:
-      moveToPositionDegrees(DXL_ID1, 90);
+      moveToPositionDegrees(DXL_ID1, 90); // +90°
       altState = ALT_M2_BACK;
       break;
     case ALT_M2_BACK:
-      moveToPositionDegrees(DXL_ID2, -90);
+      moveToPositionDegrees(DXL_ID2, 270); // -90° → 270°
       altState = ALT_M1_FORWARD;
       break;
     default:
@@ -119,56 +117,56 @@ void handleCommand(const String &cmd)
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 270, 300, true);
       moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
       moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
-      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 270, 300, true);
     }
   }
   else if (cmd == "wave_return")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 270, 300, true);
       moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
       moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
-      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 270, 300, true);
     }
     delay(1000);
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 270, 300, true);
       moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
       moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
-      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 270, 300, true);
     }
   }
   else if (cmd == "wave_back")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturnDegrees(DXL_ID2, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 270, 300, true);
       moveToAndReturnDegrees(DXL_ID1, 90, 300, true);
       moveToAndReturnDegrees(DXL_ID2, 90, 300, true);
-      moveToAndReturnDegrees(DXL_ID1, -90, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 270, 300, true);
     }
   }
   else if (cmd == "wave_large")
   {
     for (int i = 0; i < 2; i++)
     {
-      moveToAndReturnDegrees(DXL_ID1, -120, 300, true);
-      moveToAndReturnDegrees(DXL_ID2, 120, 300, true);
+      moveToAndReturnDegrees(DXL_ID1, 240, 300, true); // -120° → 240°
+      moveToAndReturnDegrees(DXL_ID2, 120, 300, true); // +120°
       moveToAndReturnDegrees(DXL_ID1, 120, 300, true);
-      moveToAndReturnDegrees(DXL_ID2, -120, 300, true);
+      moveToAndReturnDegrees(DXL_ID2, 240, 300, true);
     }
   }
   else if (cmd == "wave_random")
   {
     for (int i = 0; i < 5; i++)
     {
-      float a1 = random(-120, 121);
-      float a2 = random(-120, 121);
+      float a1 = random(0, 361); // 0〜360°
+      float a2 = random(0, 361);
       int d1 = random(200, 800);
       int d2 = random(200, 800);
       moveToAndReturnDegrees(DXL_ID1, a1, d1, false);
@@ -177,8 +175,8 @@ void handleCommand(const String &cmd)
   }
   else if (cmd == "wave_left")
   {
-    moveToAndReturnDegrees(DXL_ID1, -90, 2000, false);
-    moveToAndReturnDegrees(DXL_ID2, 90, 1000, true);
+    moveToAndReturnDegrees(DXL_ID1, 270, 2000, false); // -90° → 270°
+    moveToAndReturnDegrees(DXL_ID2, 90, 1000, true);   // +90°
   }
   else if (cmd == "start_async")
   {
@@ -198,16 +196,16 @@ void handleCommand(const String &cmd)
   {
     calibAll();
   }
-  else if (cmd.startsWith("set_1_"))
+  else if (cmd.startsWith("1_"))
   {
-    float angle = cmd.substring(6).toFloat();
+    float angle = cmd.substring(2).toFloat();
     moveToPositionDegrees(DXL_ID1, angle);
     Serial.print("Motor1 set to angle: ");
     Serial.println(angle);
   }
-  else if (cmd.startsWith("set_2_"))
+  else if (cmd.startsWith("2_"))
   {
-    float angle = cmd.substring(6).toFloat();
+    float angle = cmd.substring(2).toFloat();
     moveToPositionDegrees(DXL_ID2, angle);
     Serial.print("Motor2 set to angle: ");
     Serial.println(angle);
@@ -229,11 +227,10 @@ class CommandCallback : public BLECharacteristicCallbacks
 void setup()
 {
   Serial.begin(115200);
-  // DXL~V_2~を使う際には以下のコメントアウトを外す
   Serial2.begin(57600, SERIAL_8N1, 32, 27);
 
   // Dynamixel 初期化
-  dxl.begin(57600); // 必要に応じて 115200 に変更
+  dxl.begin(57600);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
