@@ -9,6 +9,9 @@
 const uint8_t DXL_DIR_PIN = 33;
 const uint8_t DXL_ID1 = 1;
 const uint8_t DXL_ID2 = 2;
+const uint8_t DXL_ID3 = 3;
+const uint8_t DXL_ID4 = 4;
+const uint8_t DXL_ID5 = 5;
 const float DXL_PROTOCOL_VERSION = 2.0;
 const float neutralDeg = 5.0; // calibrateで戻す角度は0度に設定
 
@@ -72,6 +75,9 @@ void calibAll()
 {
   moveToPositionDegrees(DXL_ID1, neutralDeg);
   moveToPositionDegrees(DXL_ID2, neutralDeg);
+  moveToPositionDegrees(DXL_ID3, neutralDeg);
+  moveToPositionDegrees(DXL_ID4, neutralDeg);
+  moveToPositionDegrees(DXL_ID5, neutralDeg);
 }
 
 // =================== 非同期交互動作 ===================
@@ -210,6 +216,27 @@ void handleCommand(const String &cmd)
     Serial.print("Motor2 set to angle: ");
     Serial.println(angle);
   }
+  else if (cmd.startsWith("3_"))
+  {
+    float angle = cmd.substring(2).toFloat();
+    moveToPositionDegrees(DXL_ID3, angle);
+    Serial.print("Motor3 set to angle: ");
+    Serial.println(angle);
+  }
+  else if (cmd.startsWith("4_"))
+  {
+    float angle = cmd.substring(2).toFloat();
+    moveToPositionDegrees(DXL_ID4, angle);
+    Serial.print("Motor4 set to angle: ");
+    Serial.println(angle);
+  }
+  else if (cmd.startsWith("5_"))
+  {
+    float angle = cmd.substring(2).toFloat();
+    moveToPositionDegrees(DXL_ID5, angle);
+    Serial.print("Motor5 set to angle: ");
+    Serial.println(angle);
+  }
 }
 
 // =================== BLEコールバッククラス ===================
@@ -234,6 +261,9 @@ void setup()
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
   setupDxl(DXL_ID1);
   setupDxl(DXL_ID2);
+  setupDxl(DXL_ID3);
+  setupDxl(DXL_ID4);
+  setupDxl(DXL_ID5);
   calibAll();
 
   // BLE 初期化
