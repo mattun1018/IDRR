@@ -8,9 +8,9 @@
 // Dynamixelとの通信に使用するシリアルポートとピンを指定します
 // ESP32-C3にはSerial2がないため、Serial1を使用します
 #define DXL_SERIAL Serial1
-const int DXL_RX_PIN = 8;      // Serial1のRXピン(以前は16)
-const int DXL_TX_PIN = 9;      // Serial1のTXピン(以前は17)
-const uint8_t DXL_DIR_PIN = 4; // モーターの方向制御ピン
+const int DXL_RX_PIN = 8;      // Serial1のRXピン(以前は16,32 TX_OUT)
+const int DXL_TX_PIN = 9;      // Serial1のTXピン(以前は17,27 RX_IN)
+const uint8_t DXL_DIR_PIN = 4; // モーターの方向制御ピン 33
 
 // =================== DYNAMIXEL 設定 ===================
 const uint8_t DXL_ID1 = 1;
