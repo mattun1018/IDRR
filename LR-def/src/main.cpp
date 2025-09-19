@@ -253,7 +253,7 @@ void setup()
     while (1)
       ;
   }
-  BLE.setLocalName("DynamixelCtrl");
+  BLE.setLocalName("DynamixelCtrlIDRR");
   BLE.setAdvertisedService(controlService);
   controlService.addCharacteristic(commandChar);
   BLE.addService(controlService);
@@ -297,6 +297,10 @@ void loop()
       }
     }
 
-    DEBUG_SERIAL.println("Disconnected");
+    DEBUG_SERIAL.println("Disconnected - Restarting advertising...");
+
+    // 切断時の処理：アドバタイジングを再開
+    BLE.advertise();
+    DEBUG_SERIAL.println("BLE advertising restarted");
   }
 }
