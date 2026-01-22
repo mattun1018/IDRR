@@ -1,9 +1,8 @@
 #include <Arduino.h>
 #include <DynamixelShield.h>
-#include <ArduinoBLE.h>
-#include "motion_data.h" // Pythonで作成したヘッダーファイル
+#include "motion_data.h" // Pythonで生成したヘッダーファイル
 
-// --- シリアル設定 ---
+// --- デバッグシリアル設定 ---
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
 SoftwareSerial soft_serial(7, 8);
@@ -12,69 +11,65 @@ SoftwareSerial soft_serial(7, 8);
 #define DEBUG_SERIAL Serial
 #endif
 
-// --- DYNAMIXEL XL430 (Protocol 2.0) 定数 ---
-#define DXL_PROTOCOL_VERSION 2.0
-#define TIMEOUT 10
-#define ADDR_OPERATING_MODE 11
-#define ADDR_TORQUE_ENABLE 64
-#define ADDR_GOAL_POSITION 116
-#define POSITION_CONTROL_MODE 3
-
-const uint8_t DXL_IDS[] = {1, 2, 3, 4}; // モータID: 1(左上-左下), 2(左下-右下), 3(右下-右上), 4(右上-左上)
-const uint32_t DXL_BAUD = 1000000;
-
 DynamixelShield dxl;
+using namespace ControlTableItem;
 
-// BLE定義
-BLEService controlService("180C");
-BLECharacteristic commandChar("2A56", BLEWrite, 20);
+// --- DYNAMIXEL定義 ---
+#define DXL_PROTOCOL_VERSION 2.0
+const uint8_t DXL_ID1 = 1;
+const uint8_t DXL_ID2 = 2;
+const uint8_t DXL_ID3 = 3;
+const uint8_t DXL_ID4 = 4;
+const uint8_t DXL_IDS[] = {DXL_ID1, DXL_ID2, DXL_ID3, DXL_ID4};
 
-// --- 補助関数 ---
+// (BLE removed) Serial-only control
+
+// --- セットアップ関数 ---
 void setupDxl(uint8_t id)
 {
-  uint8_t torque_off = 0, torque_on = 1;
-  uint8_t mode = POSITION_CONTROL_MODE;
-
-  dxl.write(id, ADDR_TORQUE_ENABLE, &torque_off, 1, TIMEOUT);
-  dxl.write(id, ADDR_OPERATING_MODE, &mode, 1, TIMEOUT);
-  dxl.write(id, ADDR_TORQUE_ENABLE, &torque_on, 1, TIMEOUT);
+  dxl.torqueOff(id);
+  dxl.setOperatingMode(id, OP_POSITION); // プロトコル2.0の角度制御モード
+  dxl.torqueOn(id);
 }
 
+// no BLE functions: using Serial-only commands
+
+// 全モータを初期位置(0)へ戻す
 void calibAll()
 {
-  DEBUG_SERIAL.println("Resetting all motors to 0...");
+  DEBUG_SERIAL.println("Returning to origin (0)...");
   for (int i = 0; i < 4; i++)
   {
-    dxl.setGoalPosition(DXL_IDS[i], 0);
+    dxl.setGoalPosition(DXL_IDS[i], 0, UNIT_RAW);
   }
 }
 
-// CSVモーション再生関数
+// --- CSVモーション再生機能 ---
 void playCsvMotion()
 {
-  DEBUG_SERIAL.print("Starting motion execution: ");
+  DEBUG_SERIAL.print("Executing CSV Motion: ");
   DEBUG_SERIAL.print(TOTAL_STEPS);
   DEBUG_SERIAL.println(" steps.");
 
   for (int s = 0; s < TOTAL_STEPS; s++)
   {
-    // 4基のモータにCSVからの計算値を送信
-    dxl.setGoalPosition(DXL_IDS[0], MOTION_DATA[s][0]);
-    dxl.setGoalPosition(DXL_IDS[1], MOTION_DATA[s][1]);
-    dxl.setGoalPosition(DXL_IDS[2], MOTION_DATA[s][2]);
-    dxl.setGoalPosition(DXL_IDS[3], MOTION_DATA[s][3]);
+    // 4基同時に目標位置(Step値)を送信
+    dxl.setGoalPosition(DXL_ID1, MOTION_DATA[s][0], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID2, MOTION_DATA[s][1], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID3, MOTION_DATA[s][2], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID4, MOTION_DATA[s][3], UNIT_RAW);
 
-    // シミュレーションステップ 1ms に同期
+    // シミュレーションのdt=1msに同期
     delay(1);
   }
-  DEBUG_SERIAL.println("Motion complete.");
+  DEBUG_SERIAL.println("Motion Finished.");
 }
 
 // --- コマンド処理 ---
 void handleCommand(const String &cmd)
 {
   if (cmd == "sc")
-  { // BLEやシリアルで "sc" と打つと実行
+  {
     playCsvMotion();
   }
   else if (cmd == "c" || cmd == "calibrate")
@@ -85,13 +80,23 @@ void handleCommand(const String &cmd)
   {
     for (int i = 0; i < 4; i++)
       dxl.torqueOff(DXL_IDS[i]);
-    DEBUG_SERIAL.println("Torque Off.");
+    DEBUG_SERIAL.println("Torque Off");
   }
   else if (cmd == "on")
   {
     for (int i = 0; i < 4; i++)
       dxl.torqueOn(DXL_IDS[i]);
-    DEBUG_SERIAL.println("Torque On.");
+    DEBUG_SERIAL.println("Torque On");
+  }
+  else if (cmd.startsWith("set_"))
+  {
+    // 例: "set_1_2048" -> ID1を2048に設定
+    int first_ = cmd.indexOf('_');
+    int second_ = cmd.indexOf('_', first_ + 1);
+    int id = cmd.substring(first_ + 1, second_).toInt();
+    int pos = cmd.substring(second_ + 1).toInt();
+    if (id >= 1 && id <= 4)
+      dxl.setGoalPosition(id, pos, UNIT_RAW);
   }
 }
 
@@ -99,61 +104,22 @@ void handleCommand(const String &cmd)
 void setup()
 {
   DEBUG_SERIAL.begin(115200);
-  dxl.begin(DXL_BAUD);
+
+  // Dynamixel初期化 (以前の 57600 から、XL430で一般的な 1000000 に調整)
+  dxl.begin(57600);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
   for (int i = 0; i < 4; i++)
     setupDxl(DXL_IDS[i]);
-  calibAll();
 
-  // BLEセットアップ
-  if (!BLE.begin())
-  {
-    DEBUG_SERIAL.println("BLE init failed");
-    while (1)
-      ;
-  }
-  BLE.setLocalName("XL430_Motion_Ctrl");
-  BLE.setAdvertisedService(controlService);
-  controlService.addCharacteristic(commandChar);
-  BLE.addService(controlService);
-  commandChar.writeValue("");
-  BLE.advertise();
-
-  DEBUG_SERIAL.println("System Ready. Send 'sc' via BLE/Serial to start.");
-
-  // --- quick sanity test: move each motor a small amount to verify they respond ---
-  auto sanityTest = [&]()
-  {
-    DEBUG_SERIAL.println("Running sanity test: small moves on all motors");
-    const int center = 2048;
-    const int offset = 300; // small movement
-
-    // Move to center+offset
-    dxl.setGoalPosition(DXL_IDS[0], center + offset);
-    dxl.setGoalPosition(DXL_IDS[1], center - offset);
-    dxl.setGoalPosition(DXL_IDS[2], center + offset);
-    dxl.setGoalPosition(DXL_IDS[3], center - offset);
-    delay(1000);
-
-    // Move back to center
-    dxl.setGoalPosition(DXL_IDS[0], center);
-    dxl.setGoalPosition(DXL_IDS[1], center);
-    dxl.setGoalPosition(DXL_IDS[2], center);
-    dxl.setGoalPosition(DXL_IDS[3], center);
-    delay(1000);
-
-    DEBUG_SERIAL.println("Sanity test done");
-  };
-
-  // Run the quick sanity test once at startup
-  sanityTest();
+  calibAll(); // 初期位置 0 へ
+  DEBUG_SERIAL.println("System Ready. Send 'sc' via Serial to start.");
 }
 
 // --- loop ---
 void loop()
 {
-  // Serial入力
+  // シリアル入力
   if (Serial.available() > 0)
   {
     String cmd = Serial.readStringUntil('\n');
@@ -161,25 +127,6 @@ void loop()
     handleCommand(cmd);
   }
 
-  // BLE入力
-  BLEDevice central = BLE.central();
-  if (central)
-  {
-    DEBUG_SERIAL.print("Connected to: ");
-    DEBUG_SERIAL.println(central.address());
-
-    while (central.connected())
-    {
-      if (commandChar.written())
-      {
-        String cmd = String((const char *)commandChar.value(), commandChar.valueLength());
-        cmd.trim();
-        DEBUG_SERIAL.print("BLE Command: ");
-        DEBUG_SERIAL.println(cmd);
-        handleCommand(cmd);
-      }
-    }
-    DEBUG_SERIAL.println("Disconnected - Advertising...");
-    BLE.advertise();
-  }
+  // idle
+  delay(10);
 }
