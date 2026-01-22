@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <DynamixelShield.h>
-#include <ArduinoBLE.h>
 
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
@@ -21,15 +20,7 @@ using namespace ControlTableItem;
 #define DXL_ID4 4
 #define DXL_ID5 5
 
-BLEService controlService("180C");
-BLECharacteristic commandChar("2A56", BLEWrite, 20);
-
 const float neutralDeg = 10.0;
-
-// BLE接続管理用変数
-bool bleConnected = false;
-unsigned long lastConnectionTime = 0;
-const unsigned long reconnectInterval = 5000; // 5秒間隔で再接続を試行
 
 // --- セットアップ関数 ---
 void setupDxl(uint8_t id)
@@ -37,48 +28,6 @@ void setupDxl(uint8_t id)
   dxl.torqueOff(id);
   dxl.setOperatingMode(id, OP_POSITION);
   dxl.torqueOn(id);
-}
-
-// BLE初期化・再接続関数
-bool initializeBLE()
-{
-  if (!BLE.begin())
-  {
-    DEBUG_SERIAL.println("BLE init failed");
-    return false;
-  }
-
-  BLE.setLocalName("DynamixelCtrlArduino");
-  BLE.setAdvertisedService(controlService);
-  controlService.addCharacteristic(commandChar);
-  BLE.addService(controlService);
-  commandChar.writeValue("");
-  BLE.advertise();
-  DEBUG_SERIAL.println("BLE Ready - Advertising...");
-  return true;
-}
-
-// BLE再接続処理
-void reconnectBLE()
-{
-  unsigned long currentTime = millis();
-  if (currentTime - lastConnectionTime >= reconnectInterval)
-  {
-    DEBUG_SERIAL.println("Attempting BLE reconnection...");
-    BLE.stopAdvertise();
-    delay(100);
-
-    if (initializeBLE())
-    {
-      DEBUG_SERIAL.println("BLE reconnection successful");
-    }
-    else
-    {
-      DEBUG_SERIAL.println("BLE reconnection failed");
-    }
-
-    lastConnectionTime = currentTime;
-  }
 }
 
 void moveToPositionDegrees(uint8_t id, float deg)
@@ -370,12 +319,11 @@ void setup()
   setupDxl(DXL_ID5);
   calibAllStartup();
 
-  if (!initializeBLE())
-  {
-    DEBUG_SERIAL.println("Initial BLE setup failed");
-    while (1)
-      ;
-  }
+  DEBUG_SERIAL.println("System Ready - Serial control");
+  DEBUG_SERIAL.println("Available commands:");
+  DEBUG_SERIAL.println("  wave_forward, wave_back, wave_return, wave_large");
+  DEBUG_SERIAL.println("  wave_random, wave_left, start_async, stop_async");
+  DEBUG_SERIAL.println("  calibrate, set_1_90, 1_180 (ID_angle format)");
 }
 
 // --- loop ---
@@ -383,45 +331,18 @@ void loop()
 {
   updateAltMotion();
 
-  char val = Serial.read();
-  if (val > 0)
+  // シリアル入力処理（改行終端）
+  if (Serial.available() > 0)
   {
-    String cmd(1, val);
-    handleCommand(cmd);
-  }
-
-  BLEDevice central = BLE.central();
-  if (central)
-  {
-    if (!bleConnected)
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd.length() > 0)
     {
-      DEBUG_SERIAL.print("Connected to: ");
-      DEBUG_SERIAL.println(central.address());
-      bleConnected = true;
-    }
-
-    while (central.connected())
-    {
-      updateAltMotion();
-      if (commandChar.written())
-      {
-        String cmd = String((const char *)commandChar.value(), commandChar.valueLength());
-        DEBUG_SERIAL.print("BLE受信: ");
-        DEBUG_SERIAL.println(cmd);
-        handleCommand(cmd);
-      }
-    }
-
-    if (bleConnected)
-    {
-      DEBUG_SERIAL.println("Disconnected - Starting reconnection process");
-      bleConnected = false;
-      lastConnectionTime = millis();
+      DEBUG_SERIAL.print("Command received: ");
+      DEBUG_SERIAL.println(cmd);
+      handleCommand(cmd);
     }
   }
-  else if (!bleConnected)
-  {
-    // 接続されていない場合、定期的に再接続を試行
-    reconnectBLE();
-  }
+
+  delay(10);
 }
