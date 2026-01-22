@@ -10,13 +10,13 @@ import os
 # 1. 排他制御（奇数ペアか偶数ペアの片方しか動かさないルール）を有効にするか
 # False (デフォルト): 各モータは独立して動作（以前のルール）。「フラグがoff」の状態です。
 # True: 常に奇数番(M1, M3)か偶数番(M2, M4)のどちらか一方のペアのみを動かす。
-ENABLE_GAIT_EXCLUSION = False
+ENABLE_GAIT_EXCLUSION = True
 
 # 2. 同値（タイ）になった時の挙動（ENABLE_GAIT_EXCLUSION = True の時のみ有効）
 # "none" -> どちらも動かさない (0にする)。これがご要望の「デフォルトoff」に近い挙動です。
 # "odd"  -> 奇数ペアを優先
 # "even" -> 偶数ペアを優先
-TIE_BREAK_MODE = "none" 
+TIE_BREAK_MODE = "odd" 
 
 # 物理定数
 PULLEY_RADIUS = 0.012
