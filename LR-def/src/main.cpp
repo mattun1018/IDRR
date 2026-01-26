@@ -1,6 +1,7 @@
-#include <Arduino.h>
-#include <DynamixelShield.h>
 #include "motion_data.h" // Pythonで生成したヘッダーファイル
+#include <Arduino.h>
+#include <ArduinoBLE.h>
+#include <DynamixelShield.h>
 
 // --- デバッグシリアル設定 ---
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
@@ -22,11 +23,14 @@ const uint8_t DXL_ID3 = 3;
 const uint8_t DXL_ID4 = 4;
 const uint8_t DXL_IDS[] = {DXL_ID1, DXL_ID2, DXL_ID3, DXL_ID4};
 
-// (BLE removed) Serial-only control
+// --- BLE設定 ---
+// UUIDs generated for this specific service and characteristic
+BLEService dxlService("19B10000-E8F2-537E-4F6C-D104768A1214");
+BLEStringCharacteristic rxChar("19B10001-E8F2-537E-4F6C-D104768A1214", BLEWrite,
+                               32);
 
 // --- セットアップ関数 ---
-void setupDxl(uint8_t id)
-{
+void setupDxl(uint8_t id) {
   dxl.torqueOff(id);
   dxl.setOperatingMode(id, OP_POSITION); // プロトコル2.0の角度制御モード
   dxl.torqueOn(id);
@@ -34,25 +38,21 @@ void setupDxl(uint8_t id)
 
 // no BLE functions: using Serial-only commands
 
-// 全モータを初期位置(0)へ戻す
-void calibAll()
-{
-  DEBUG_SERIAL.println("Returning to origin (0)...");
-  for (int i = 0; i < 4; i++)
-  {
-    dxl.setGoalPosition(DXL_IDS[i], 0, UNIT_RAW);
+// 全モータを初期位置(2048)へ戻す
+void calibAll() {
+  DEBUG_SERIAL.println("Returning to origin (2048)...");
+  for (int i = 0; i < 4; i++) {
+    dxl.setGoalPosition(DXL_IDS[i], 2048, UNIT_RAW);
   }
 }
 
 // --- CSVモーション再生機能 ---
-void playCsvMotion()
-{
+void playCsvMotion() {
   DEBUG_SERIAL.print("Executing CSV Motion: ");
   DEBUG_SERIAL.print(TOTAL_STEPS);
   DEBUG_SERIAL.println(" steps.");
 
-  for (int s = 0; s < TOTAL_STEPS; s++)
-  {
+  for (int s = 0; s < TOTAL_STEPS; s++) {
     // 4基同時に目標位置(Step値)を送信
     dxl.setGoalPosition(DXL_ID1, MOTION_DATA[s][0], UNIT_RAW);
     dxl.setGoalPosition(DXL_ID2, MOTION_DATA[s][1], UNIT_RAW);
@@ -66,30 +66,20 @@ void playCsvMotion()
 }
 
 // --- コマンド処理 ---
-void handleCommand(const String &cmd)
-{
-  if (cmd == "sc")
-  {
+void handleCommand(const String &cmd) {
+  if (cmd == "sc") {
     playCsvMotion();
-  }
-  else if (cmd == "c" || cmd == "calibrate")
-  {
+  } else if (cmd == "c" || cmd == "calibrate") {
     calibAll();
-  }
-  else if (cmd == "off")
-  {
+  } else if (cmd == "off") {
     for (int i = 0; i < 4; i++)
       dxl.torqueOff(DXL_IDS[i]);
     DEBUG_SERIAL.println("Torque Off");
-  }
-  else if (cmd == "on")
-  {
+  } else if (cmd == "on") {
     for (int i = 0; i < 4; i++)
       dxl.torqueOn(DXL_IDS[i]);
     DEBUG_SERIAL.println("Torque On");
-  }
-  else if (cmd.startsWith("set_"))
-  {
+  } else if (cmd.startsWith("set_")) {
     // 例: "set_1_2048" -> ID1を2048に設定
     int first_ = cmd.indexOf('_');
     int second_ = cmd.indexOf('_', first_ + 1);
@@ -101,8 +91,7 @@ void handleCommand(const String &cmd)
 }
 
 // --- setup ---
-void setup()
-{
+void setup() {
   DEBUG_SERIAL.begin(115200);
 
   // Dynamixel初期化 (以前の 57600 から、XL430で一般的な 1000000 に調整)
@@ -113,15 +102,43 @@ void setup()
     setupDxl(DXL_IDS[i]);
 
   calibAll(); // 初期位置 0 へ
-  DEBUG_SERIAL.println("System Ready. Send 'sc' via Serial to start.");
+
+  // --- BLE初期化 ---
+  if (!BLE.begin()) {
+    DEBUG_SERIAL.println("starting BLE failed!");
+    while (1)
+      ;
+  }
+
+  BLE.setLocalName("DynamixelController");
+  BLE.setAdvertisedService(dxlService);
+  dxlService.addCharacteristic(rxChar);
+  BLE.addService(dxlService);
+
+  BLE.advertise();
+  DEBUG_SERIAL.println("BLE Active. Waiting for connections...");
+  DEBUG_SERIAL.println("System Ready. Send 'sc' via Serial or BLE to start.");
 }
 
 // --- loop ---
-void loop()
-{
+void loop() {
+  // --- BLE処理 ---
+  BLEDevice central = BLE.central();
+  if (central) {
+    // 接続されたら
+    if (central.connected()) {
+      if (rxChar.written()) {
+        String bleCmd = rxChar.value();
+        bleCmd.trim();
+        DEBUG_SERIAL.print("BLE Command: ");
+        DEBUG_SERIAL.println(bleCmd);
+        handleCommand(bleCmd);
+      }
+    }
+  }
+
   // シリアル入力
-  if (Serial.available() > 0)
-  {
+  if (Serial.available() > 0) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
     handleCommand(cmd);
