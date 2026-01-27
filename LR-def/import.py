@@ -36,10 +36,14 @@ def get_directional_step(v_a, v_b):
     return CENTER_POS
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 import.py [CSV_FILE_PATH]")
+    if len(sys.argv) < 3:
+        print("Usage: python3 import.py [CSV_FILE_PATH] [LABEL]")
+        print("LABEL examples: fc, sc, fd, sd")
         return
     csv_path = sys.argv[1]
+    label = sys.argv[2] # e.g., "fc", "sc", "fd", "sd"
+    label_upper = label.upper()
+    
     results = []
 
     with open(csv_path, mode='r', encoding='utf-8') as f:
@@ -70,16 +74,21 @@ def main():
                 
             results.append((m1, m2, m3, m4))
 
-    # motion_data.h 書き出し
-    with open("src/motion_data.h", "w") as f:
-        f.write("#ifndef MOTION_DATA_H\n#define MOTION_DATA_H\n\n#include <Arduino.h>\n\n")
-        f.write(f"const int TOTAL_STEPS = {len(results)};\n")
-        f.write("const uint16_t MOTION_DATA[][4] = {\n")
+    # ヘッダー書き出し
+    out_filename = f"src/motion_{label}.h"
+    var_steps = f"STEPS_{label_upper}"
+    var_data = f"MOTION_{label_upper}"
+    guard = f"MOTION_{label_upper}_H"
+
+    with open(out_filename, "w") as f:
+        f.write(f"#ifndef {guard}\n#define {guard}\n\n#include <Arduino.h>\n\n")
+        f.write(f"const int {var_steps} = {len(results)};\n")
+        f.write(f"const uint16_t {var_data}[][4] = {{\n")
         for res in results:
             f.write(f"  {{{res[0]}, {res[1]}, {res[2]}, {res[3]}}},\n")
         f.write("};\n\n#endif")
     
-    print(f"Done: motion_data.h created. 設定モード: {MODE}")
+    print(f"Done: {out_filename} created. Mode: {MODE}, Label: {label}")
 
 if __name__ == "__main__":
     main()

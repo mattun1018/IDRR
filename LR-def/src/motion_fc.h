@@ -1,10 +1,10 @@
-#ifndef MOTION_DATA_H
-#define MOTION_DATA_H
+#ifndef MOTION_FC_H
+#define MOTION_FC_H
 
 #include <Arduino.h>
 
-const int TOTAL_STEPS = 129;
-const uint16_t MOTION_DATA[][4] = {
+const int STEPS_FC = 129;
+const uint16_t MOTION_FC[][4] = {
   {2028, 2048, 2028, 2048},
   {2048, 2048, 2039, 2048},
   {2132, 2048, 2124, 2048},

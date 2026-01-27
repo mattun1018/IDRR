@@ -1,4 +1,7 @@
-#include "motion_data.h" // Pythonで生成したヘッダーファイル
+#include "motion_fc.h"
+#include "motion_fd.h"
+#include "motion_sc.h"
+#include "motion_sd.h"
 #include <Arduino.h>
 #include <ArduinoBLE.h>
 #include <DynamixelShield.h>
@@ -47,17 +50,17 @@ void calibAll() {
 }
 
 // --- CSVモーション再生機能 ---
-void playCsvMotion() {
-  DEBUG_SERIAL.print("Executing CSV Motion: ");
-  DEBUG_SERIAL.print(TOTAL_STEPS);
+void playCsvMotion(const uint16_t data[][4], int steps) {
+  DEBUG_SERIAL.print("Executing Motion: ");
+  DEBUG_SERIAL.print(steps);
   DEBUG_SERIAL.println(" steps.");
 
-  for (int s = 0; s < TOTAL_STEPS; s++) {
+  for (int s = 0; s < steps; s++) {
     // 4基同時に目標位置(Step値)を送信
-    dxl.setGoalPosition(DXL_ID1, MOTION_DATA[s][0], UNIT_RAW);
-    dxl.setGoalPosition(DXL_ID2, MOTION_DATA[s][1], UNIT_RAW);
-    dxl.setGoalPosition(DXL_ID3, MOTION_DATA[s][2], UNIT_RAW);
-    dxl.setGoalPosition(DXL_ID4, MOTION_DATA[s][3], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID1, data[s][0], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID2, data[s][1], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID3, data[s][2], UNIT_RAW);
+    dxl.setGoalPosition(DXL_ID4, data[s][3], UNIT_RAW);
 
     // シミュレーションのdt=1msに同期
     delay(1);
@@ -67,8 +70,14 @@ void playCsvMotion() {
 
 // --- コマンド処理 ---
 void handleCommand(const String &cmd) {
-  if (cmd == "sc") {
-    playCsvMotion();
+  if (cmd == "fc") {
+    playCsvMotion(MOTION_FC, STEPS_FC);
+  } else if (cmd == "sc") {
+    playCsvMotion(MOTION_SC, STEPS_SC);
+  } else if (cmd == "fd") {
+    playCsvMotion(MOTION_FD, STEPS_FD);
+  } else if (cmd == "sd") {
+    playCsvMotion(MOTION_SD, STEPS_SD);
   } else if (cmd == "c" || cmd == "calibrate") {
     calibAll();
   } else if (cmd == "off") {
@@ -117,7 +126,8 @@ void setup() {
 
   BLE.advertise();
   DEBUG_SERIAL.println("BLE Active. Waiting for connections...");
-  DEBUG_SERIAL.println("System Ready. Send 'sc' via Serial or BLE to start.");
+  DEBUG_SERIAL.println(
+      "System Ready. Send 'fc', 'sc', 'fd', 'sd' via Serial or BLE to start.");
 }
 
 // --- loop ---
