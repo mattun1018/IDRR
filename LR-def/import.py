@@ -10,7 +10,7 @@ import os
 # "manual_odd"  -> 常に 奇数ペア(M1, M3) だけを動かす。偶数ペアは 2048 固定。
 # "manual_even" -> 常に 偶数ペア(M2, M4) だけを動かす。奇数ペアは 2048 固定。
 # "auto"        -> シミュレーションの変位が大きい方のペアを自動で選ぶ。
-MODE = "manual_odd" 
+MODE = "off" 
 
 # 物理定数
 PULLEY_RADIUS = 0.016  # 16mm
