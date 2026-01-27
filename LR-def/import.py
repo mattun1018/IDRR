@@ -71,8 +71,8 @@ def main():
             results.append((m1, m2, m3, m4))
 
     # motion_data.h 書き出し
-    with open("motion_data.h", "w") as f:
-        f.write("#ifndef MOTION_DATA_H\n#define MOTION_DATA_H\n\n")
+    with open("src/motion_data.h", "w") as f:
+        f.write("#ifndef MOTION_DATA_H\n#define MOTION_DATA_H\n\n#include <Arduino.h>\n\n")
         f.write(f"const int TOTAL_STEPS = {len(results)};\n")
         f.write("const uint16_t MOTION_DATA[][4] = {\n")
         for res in results:
